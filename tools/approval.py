@@ -352,6 +352,35 @@ def save_permanent_allowlist(patterns: set):
         logger.warning("Could not save allowlist: %s", e)
 
 
+def build_approval_prompt(cmd: str, desc: str, *, allow_permanent: bool = True) -> str:
+    """Build the user-facing gateway approval message text.
+
+    Args:
+        cmd: The command requiring approval (may be pre-truncated).
+        desc: Human-readable reason the command was flagged.
+        allow_permanent: When False, omit ``/approve always`` from the
+            returned text.  Set to False when any warning is Tirith-backed,
+            since broad permanent allowlisting is inappropriate for
+            content-level security findings.
+    """
+    if allow_permanent:
+        options = (
+            "Reply `/approve` to execute, `/approve session` to approve this pattern "
+            "for the session, `/approve always` to approve permanently, or `/deny` to cancel."
+        )
+    else:
+        options = (
+            "Reply `/approve` to execute, `/approve session` to approve this pattern "
+            "for the session, or `/deny` to cancel."
+        )
+    return (
+        f"\u26a0\ufe0f **Dangerous command requires approval:**\n"
+        f"```\n{cmd}\n```\n"
+        f"Reason: {desc}\n\n"
+        f"{options}"
+    )
+
+
 # =========================================================================
 # Approval prompting + orchestration
 # =========================================================================
@@ -754,6 +783,7 @@ def check_all_command_guards(command: str, env_type: str,
                 "pattern_key": primary_key,
                 "pattern_keys": all_keys,
                 "description": combined_desc,
+                "has_tirith": has_tirith,
             }
             entry = _ApprovalEntry(approval_data)
             with _lock:
