@@ -458,12 +458,20 @@ def profile_env(tmp_path, monkeypatch):
 ## Testing
 
 ```bash
-source venv/bin/activate
-python -m pytest tests/ -q          # Full suite (~3000 tests, ~3 min)
-python -m pytest tests/test_model_tools.py -q   # Toolset resolution
-python -m pytest tests/test_cli_init.py -q       # CLI config loading
-python -m pytest tests/gateway/ -q               # Gateway tests
-python -m pytest tests/tools/ -q                 # Tool-level tests
+# All commands below use --frozen to run against the committed lockfile.
+# This prevents uv from re-resolving dependencies and avoids accidental
+# changes to uv.lock as a side effect of running tests.
+
+uv run --frozen --extra dev --extra messaging pytest tests/ -q          # Full suite (~3000 tests, ~3 min)
+uv run --frozen --extra dev --extra messaging pytest tests/test_model_tools.py -q   # Toolset resolution
+uv run --frozen --extra dev --extra messaging pytest tests/test_cli_init.py -q       # CLI config loading
+uv run --frozen --extra dev --extra messaging pytest tests/gateway/ -q               # Gateway tests
+uv run --frozen --extra dev --extra messaging pytest tests/tools/ -q                 # Tool-level tests
 ```
 
 Always run the full suite before pushing changes.
+
+> **Note on `uv.lock` hygiene:** `uv run` without `--frozen` re-resolves
+> dependencies and may modify `uv.lock` as a side effect. Always use
+> `--frozen` for test runs; use `git checkout -- uv.lock` to discard any
+> accidental drift before committing.
