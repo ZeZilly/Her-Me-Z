@@ -452,15 +452,29 @@ def _normalize_approval_mode(mode) -> str:
     return "manual"
 
 
-def _get_approval_mode() -> str:
-    """Read the approval mode from config. Returns 'manual', 'smart', or 'off'."""
+def _get_approval_config() -> dict:
+    """Read the approvals config block. Returns a dict with mode/timeout settings."""
     try:
         from hermes_cli.config import load_config
+
         config = load_config()
-        mode = config.get("approvals", {}).get("mode", "manual")
-        return _normalize_approval_mode(mode)
+        return config.get("approvals", {}) or {}
     except Exception:
-        return "manual"
+        return {}
+
+
+def _get_approval_mode() -> str:
+    """Read the approval mode from config. Returns 'manual', 'smart', or 'off'."""
+    mode = _get_approval_config().get("mode", "manual")
+    return _normalize_approval_mode(mode)
+
+
+def _get_approval_timeout() -> int:
+    """Read the approval timeout from config. Defaults to 60 seconds."""
+    try:
+        return int(_get_approval_config().get("timeout", 60))
+    except (ValueError, TypeError):
+        return 60
 
 
 def _smart_approve(command: str, description: str) -> str:
