@@ -31,13 +31,17 @@ function saveState(state) {
 
 const LOCK_FILE = path.join('/workspace/project-ecosystem', '.runner.lock');
 
+const { processInbox, sendFeedback } = require('./hermez-adapter');
+
 const COMMAND_WHITELIST = [
     'echo',
     'git pull',
     'git status',
+    'git log',
     'npm install',
     'ls',
-    'df -h'
+    'df -h',
+    'uname -a'
 ];
 
 function sanitizeCommand(cmd) {
@@ -59,6 +63,9 @@ async function runGSD() {
 
     try {
         console.log('🚀 GSD-OpenClaw Runner (Industrial Grade) Başlatıldı...');
+        
+        // Önce Her-Me-Z Inbox'ını işle
+        processInbox();
         
         const state = loadState();
 
@@ -124,10 +131,21 @@ async function runGSD() {
                     state.processed_plans[planFile].status = 'COMPLETED';
                     console.log(`✅ Başarıyla tamamlandı: ${planFile}`);
 
+                    // Her-Me-Z Geri Bildirim
+                    if (state.processed_plans[planFile].source === 'hermez') {
+                        const planId = planFile.replace('hermez_', '').replace('.xml', '');
+                        sendFeedback(planId, 'COMPLETED', logPath);
+                    }
+
                 } catch (err) {
                     state.processed_plans[planFile].status = 'FAILED';
                     state.processed_plans[planFile].error = err.message;
                     console.error(`❌ Plan başarısız (${planFile}):`, err.message);
+
+                    if (state.processed_plans[planFile].source === 'hermez') {
+                        const planId = planFile.replace('hermez_', '').replace('.xml', '');
+                        sendFeedback(planId, 'FAILED', logPath, err.message);
+                    }
                 }
 
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
