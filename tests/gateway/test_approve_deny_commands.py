@@ -630,3 +630,36 @@ class TestFallbackNoCallback:
 
         assert result["approved"] is False
         assert result.get("status") == "approval_required"
+
+
+# ------------------------------------------------------------------
+# T2 — build_approval_prompt: Tirith context hides /approve always
+# ------------------------------------------------------------------
+
+
+class TestApprovalPromptText:
+    """T2: build_approval_prompt conditionally omits /approve always."""
+
+    def test_tirith_backed_warning_hides_always_option(self):
+        """/approve always must be absent when allow_permanent=False (Tirith-backed)."""
+        from tools.approval import build_approval_prompt
+
+        msg = build_approval_prompt(
+            "rm -rf /sensitive", "security violation (tirith)", allow_permanent=False
+        )
+        assert "/approve always" not in msg
+        assert "/approve" in msg
+        assert "/approve session" in msg
+        assert "/deny" in msg
+
+    def test_non_tirith_warning_shows_always_option(self):
+        """/approve always must appear when allow_permanent=True (no Tirith warning)."""
+        from tools.approval import build_approval_prompt
+
+        msg = build_approval_prompt(
+            "rm -rf /tmp/test", "matches rm-rf pattern", allow_permanent=True
+        )
+        assert "/approve always" in msg
+        assert "/approve session" in msg
+        assert "/deny" in msg
+

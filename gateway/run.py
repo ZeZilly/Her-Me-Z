@@ -5479,15 +5479,13 @@ class GatewayRunner:
 
             def _approval_notify_sync(approval_data: dict) -> None:
                 """Send the approval request to the user from the agent thread."""
+                from tools.approval import build_approval_prompt
                 cmd = approval_data.get("command", "")
                 cmd_preview = cmd[:200] + "..." if len(cmd) > 200 else cmd
                 desc = approval_data.get("description", "dangerous command")
-                msg = (
-                    f"⚠️ **Dangerous command requires approval:**\n"
-                    f"```\n{cmd_preview}\n```\n"
-                    f"Reason: {desc}\n\n"
-                    f"Reply `/approve` to execute, `/approve session` to approve this pattern "
-                    f"for the session, `/approve always` to approve permanently, or `/deny` to cancel."
+                has_tirith = approval_data.get("has_tirith", False)
+                msg = build_approval_prompt(
+                    cmd_preview, desc, allow_permanent=not has_tirith
                 )
                 try:
                     asyncio.run_coroutine_threadsafe(
