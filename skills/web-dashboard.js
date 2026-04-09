@@ -19,6 +19,7 @@ module.exports = {
         const completed = plans.filter(p => p.status === 'COMPLETED').length;
         const failed = plans.filter(p => p.status === 'FAILED').length;
         const rate = plans.length > 0 ? ((completed / plans.length) * 100).toFixed(2) : 0;
+        const securityAlert = state.security_alert && state.security_alert.active;
 
         const html = `
 <!DOCTYPE html>
@@ -30,6 +31,8 @@ module.exports = {
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; }
         .container { max-width: 1000px; margin: auto; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b; padding-bottom: 20px; }
+        .alert-banner { background: #ef4444; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-weight: bold; display: ${securityAlert ? 'block' : 'none'}; animation: blink 2s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 30px 0; }
         .card { background: #1e293b; padding: 20px; border-radius: 12px; text-align: center; border: 1px solid #334155; }
         .card h2 { font-size: 2.5rem; margin: 10px 0; color: #38bdf8; }
@@ -43,6 +46,7 @@ module.exports = {
 </head>
 <body>
     <div class="container">
+        <div class="alert-banner">🚨 GÜVENLİK ALARMI: Sistem saldırı girişimi engelledi! (Kaynak: ${state.security_alert?.source || 'Bilinmeyen'})</div>
         <div class="header">
             <h1>🏛️ Master Orkestratör Dashboard</h1>
             <div class="badge">Sistem Durumu: OTONOM</div>
