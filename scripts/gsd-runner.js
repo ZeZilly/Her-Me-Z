@@ -29,83 +29,127 @@ function saveState(state) {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
+const LOCK_FILE = path.join('/workspace/project-ecosystem', '.runner.lock');
+
+const COMMAND_WHITELIST = [
+    'echo',
+    'git pull',
+    'git status',
+    'npm install',
+    'ls',
+    'df -h'
+];
+
+function sanitizeCommand(cmd) {
+    // Tehlikeli karakterleri temizle: |, &, ;, $(), <, >, `
+    return cmd.replace(/[|&;$\(\)<>`]/g, '').trim();
+}
+
+function isCommandAllowed(cmd) {
+    return COMMAND_WHITELIST.some(allowed => cmd.startsWith(allowed));
+}
+
 async function runGSD() {
-    console.log('🚀 GSD-OpenClaw Runner (Industrial Grade) Başlatıldı...');
-    
-    const state = loadState();
-
-    if (!fs.existsSync(PLANS_DIR)) {
-        console.log('ℹ️ Plan dizini bulunamadı, oluşturuluyor...');
-        fs.mkdirSync(PLANS_DIR, { recursive: true });
-    }
-
-    const plans = fs.readdirSync(PLANS_DIR).filter(f => f.endsWith('.md') || f.endsWith('.xml'));
-
-    if (plans.length === 0) {
-        console.log('📭 Bekleyen plan bulunamadı.');
+    // Kilitleme Mekanizması (Locking)
+    if (fs.existsSync(LOCK_FILE)) {
+        console.log('⚠️ Runner zaten çalışıyor (Lock dosyası mevcut). Çıkılıyor...');
         return;
     }
+    fs.writeFileSync(LOCK_FILE, process.pid.toString());
 
-    for (const planFile of plans) {
-        const planPath = path.join(PLANS_DIR, planFile);
-        let content;
-        try {
-            content = fs.readFileSync(planPath, 'utf8');
-        } catch (err) {
-            console.error(`❌ Dosya okuma hatası (${planFile}):`, err.message);
-            continue;
+    try {
+        console.log('🚀 GSD-OpenClaw Runner (Industrial Grade) Başlatıldı...');
+        
+        const state = loadState();
+
+        if (!fs.existsSync(PLANS_DIR)) {
+            console.log('ℹ️ Plan dizini bulunamadı, oluşturuluyor...');
+            fs.mkdirSync(PLANS_DIR, { recursive: true });
         }
 
-        const planHash = getPlanHash(content);
+        const plans = fs.readdirSync(PLANS_DIR).filter(f => f.endsWith('.md') || f.endsWith('.xml'));
 
-        // Aşama 1: Durum Yönetimi - Sadece yeni veya değişmiş planları işle
-        if (state.processed_plans[planFile] && state.processed_plans[planFile].hash === planHash && state.processed_plans[planFile].status === 'COMPLETED') {
-            console.log(`⏩ Atlanıyor (Zaten Tamamlandı): ${planFile}`);
-            continue;
-        }
+        if (plans.length === 0) {
+            console.log('📭 Bekleyen plan bulunamadı.');
+        } else {
+            for (const planFile of plans) {
+                const planPath = path.join(PLANS_DIR, planFile);
+                let content;
+                try {
+                    content = fs.readFileSync(planPath, 'utf8');
+                } catch (err) {
+                    console.error(`❌ Dosya okuma hatası (${planFile}):`, err.message);
+                    continue;
+                }
 
-        console.log(`\n📖 İşleniyor: ${planFile}`);
-        state.processed_plans[planFile] = {
-            hash: planHash,
-            status: 'IN_PROGRESS',
-            updated_at: new Date().toISOString()
-        };
+                const planHash = getPlanHash(content);
 
-        try {
-            // Aşama 2: Sağlam Hata Yönetimi & Basit XML Doğrulama
-            if (planFile.endsWith('.xml') && (!content.includes('<task>') || !content.includes('</task>'))) {
-                throw new Error('Geçersiz GSD XML formatı: <task> etiketi eksik.');
+                if (state.processed_plans[planFile] && state.processed_plans[planFile].hash === planHash && state.processed_plans[planFile].status === 'COMPLETED') {
+                    console.log(`⏩ Atlanıyor (Zaten Tamamlandı): ${planFile}`);
+                    continue;
+                }
+
+                console.log(`\n📖 İşleniyor: ${planFile}`);
+                state.processed_plans[planFile] = {
+                    hash: planHash,
+                    status: 'IN_PROGRESS',
+                    updated_at: new Date().toISOString()
+                };
+
+                try {
+                    // Aşama 2: Sağlam Hata Yönetimi & Basit XML Doğrulama
+                    if (planFile.endsWith('.xml') && (!content.includes('<task>') || !content.includes('</task>'))) {
+                        throw new Error('Geçersiz GSD XML formatı: <task> etiketi eksik.');
+                    }
+
+                    // Aksiyon Ayıklama (Regex ile)
+                    const actionMatch = content.match(/<action>(.*?)<\/action>/s);
+                    if (actionMatch) {
+                        const rawCommand = actionMatch[1].trim();
+                        const sanitizedCmd = sanitizeCommand(rawCommand);
+
+                        console.log(`⚡ Eylem (Action) Tespit Edildi: ${sanitizedCmd}`);
+
+                        // Aşama 3: Güvenli Komut İnfazı (Whitelist Kontrolü)
+                        if (!isCommandAllowed(sanitizedCmd)) {
+                            throw new Error(`Güvenlik Engeli: '${sanitizedCmd}' komutu izin verilenler listesinde (Whitelist) yok.`);
+                        }
+
+                        console.log(`🛠️ Komut Çalıştırılıyor: ${sanitizedCmd}`);
+                        const output = execSync(sanitizedCmd).toString();
+                        console.log('--- ÇIKTI ---');
+                        console.log(output);
+                    }
+                    
+                    state.processed_plans[planFile].status = 'COMPLETED';
+                    console.log(`✅ Başarıyla tamamlandı: ${planFile}`);
+
+                } catch (err) {
+                    state.processed_plans[planFile].status = 'FAILED';
+                    state.processed_plans[planFile].error = err.message;
+                    console.error(`❌ Plan başarısız (${planFile}):`, err.message);
+                }
+
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const logPath = path.join(LOGS_DIR, `exec-${planFile}-${timestamp}.json`);
+                fs.writeFileSync(logPath, JSON.stringify({
+                    plan: planFile,
+                    hash: planHash,
+                    executed_at: new Date().toISOString(),
+                    status: state.processed_plans[planFile].status,
+                    error: state.processed_plans[planFile].error || null
+                }, null, 2));
             }
-
-            console.log('--- GÖREV ÖZETİ ---');
-            console.log(content.split('\n').slice(0, 5).join('\n') + '...');
-
-            // Execute adımı simülasyonu
-            console.log('⚡ Eylem (Action): Analiz ediliyor...');
-            
-            // Başarılı tamamlama
-            state.processed_plans[planFile].status = 'COMPLETED';
-            console.log(`✅ Başarıyla tamamlandı: ${planFile}`);
-
-        } catch (err) {
-            state.processed_plans[planFile].status = 'FAILED';
-            state.processed_plans[planFile].error = err.message;
-            console.error(`❌ Plan başarısız (${planFile}):`, err.message);
         }
 
-        // Log kaydı
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const logPath = path.join(LOGS_DIR, `exec-${planFile}-${timestamp}.json`);
-        fs.writeFileSync(logPath, JSON.stringify({
-            plan: planFile,
-            hash: planHash,
-            executed_at: new Date().toISOString(),
-            status: state.processed_plans[planFile].status,
-            error: state.processed_plans[planFile].error || null
-        }, null, 2));
-    }
+        saveState(state);
 
-    saveState(state);
+    } finally {
+        // Lock dosyasını temizle
+        if (fs.existsSync(LOCK_FILE)) {
+            fs.unlinkSync(LOCK_FILE);
+        }
+    }
 }
 
 runGSD().catch(err => console.error('❌ Runner hatası:', err));
