@@ -1,0 +1,7 @@
+{
+  "plan": "fail_test_1.xml",
+  "hash": "19f3b4d2bfb1443a598c161151d5438ca89342a45bfc3c9b32f0cee93729dce0",
+  "executed_at": "2026-04-09T19:25:24.840Z",
+  "status": "FAILED",
+  "error": "Command failed: ls non_existent_directory_for_test\nls: cannot access 'non_existent_directory_for_test': No such file or directory\n"
+}

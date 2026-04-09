@@ -1,0 +1,5 @@
+<task>
+  <name>Simulated Failure Task 1</name>
+  <description>Force a failure to test Anomaly Detection.</description>
+  <action>ls non_existent_directory_for_test</action>
+</task>
