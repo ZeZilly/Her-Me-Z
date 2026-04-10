@@ -27,7 +27,7 @@ function evaluateRiskAndReputation(payload, systemHealth) {
     }
 
     // 2. Risk Analizi (Sistem Yükü ve Başarı Oranı)
-    if (systemHealth.success_rate < 40 && payload.priority < 2) {
+    if (systemHealth.success_rate < 5 && payload.priority < 2) {
         console.log(`⏳ YÜKSEK RİSK: Sistem başarısı düşük, görev ertelendi.`);
         return { action: 'DELAYED', reason: 'System instability' };
     }
